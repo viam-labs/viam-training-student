@@ -12,6 +12,25 @@ web app to run it.
 
 > Sections 1, 8, and 9 are delivered as instructor-led sessions and have no worksheet here.
 
+## Getting set up
+
+Clone this repo **next to** (a sibling of) the module you build during the course — not
+inside it. The palletizer worksheets copy templates with relative paths like
+`../viam-training/templates/...`, so clone it into a folder named `viam-training`:
+
+```bash
+git clone git@github.com:viam-labs/viam-training-student.git viam-training
+```
+
+That gives you this layout, which the worksheets assume:
+
+```
+your-work-dir/
+├── viam-training/          # this repo — worksheets, prereq configs, templates
+└── palletizing-module/     # the module you build (created during the palletizer arc)
+    └── cmd/cli/            # e.g. §14 runs `cp ../viam-training/templates/… .` from here
+```
+
 ## Worksheets
 
 ### Foundations
