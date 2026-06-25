@@ -1,0 +1,195 @@
+{
+  "_comment": "Reference machine config matching the end-of-Section-16 cell state. Cell unchanged since Section 10. The palletizer carries arm, gripper, pick_station, and the three box-dimension attrs (box_width_mm, box_length_mm, box_height_mm); depends_on lists arm/gripper/pick-station. Section 17 adds the pallet dep + 7 place-side states + safety_height_mm + place_dwell_secs. Replace <NAMESPACE> with your org's namespace before pushing. Used as a fallback in Section 17's Setup-check.",
+  "modules": [
+    {
+      "type": "registry",
+      "name": "workcell-components",
+      "module_id": "viam:workcell-components",
+      "version": "0.6.0-rc4"
+    },
+    {
+      "type": "registry",
+      "name": "robotiq-epick",
+      "module_id": "viam:robotiq-epick",
+      "version": "latest"
+    },
+    {
+      "type": "registry",
+      "name": "palletizing-module",
+      "module_id": "<NAMESPACE>:palletizing-module",
+      "version": "latest"
+    }
+  ],
+  "components": [
+    {
+      "name": "arm",
+      "namespace": "rdk",
+      "type": "arm",
+      "model": "rdk:builtin:simulated",
+      "attributes": {
+        "arm-model": "ur5e",
+        "simulate-time": true,
+        "speed": 0.3
+      },
+      "frame": {
+        "parent": "world",
+        "translation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "orientation": {
+          "type": "ov_degrees",
+          "value": {
+            "x": 0,
+            "y": 0,
+            "z": 1,
+            "th": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "gripper",
+      "namespace": "rdk",
+      "type": "gripper",
+      "model": "viam:robotiq:simulated-epick-vacuum-gripper",
+      "attributes": {},
+      "frame": {
+        "parent": "arm",
+        "translation": {
+          "x": 0,
+          "y": 0,
+          "z": 196
+        },
+        "orientation": {
+          "type": "ov_degrees",
+          "value": {
+            "x": 0,
+            "y": 0,
+            "z": 1,
+            "th": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "floor",
+      "namespace": "rdk",
+      "type": "generic",
+      "model": "rdk:builtin:fake",
+      "attributes": {},
+      "frame": {
+        "parent": "world",
+        "translation": {
+          "x": 0,
+          "y": 0,
+          "z": -50
+        },
+        "geometry": {
+          "type": "box",
+          "x": 2000,
+          "y": 2000,
+          "z": 10,
+          "label": "floor"
+        }
+      }
+    },
+    {
+      "name": "pallet",
+      "namespace": "rdk",
+      "type": "generic",
+      "model": "viam:workcell-components:pallet",
+      "attributes": {
+        "width_mm": 500,
+        "length_mm": 350,
+        "thickness_mm": 100
+      },
+      "frame": {
+        "parent": "world",
+        "translation": {
+          "x": 200,
+          "y": 500,
+          "z": 100
+        },
+        "orientation": {
+          "type": "ov_degrees",
+          "value": {
+            "x": 0,
+            "y": 0,
+            "z": 1,
+            "th": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "pick-station",
+      "namespace": "rdk",
+      "type": "generic",
+      "model": "viam:workcell-components:pick-station",
+      "attributes": {
+        "lowest_point_height_mm": 200,
+        "box_origin_offset_mm": {
+          "x": 200,
+          "y": 200
+        },
+        "box_theta_deg": 0,
+        "pick_home_z_offset_mm": 120
+      },
+      "frame": {
+        "parent": "world",
+        "translation": {
+          "x": 400,
+          "y": -300,
+          "z": 200
+        },
+        "orientation": {
+          "type": "ov_degrees",
+          "value": {
+            "x": 0,
+            "y": 0,
+            "z": 1,
+            "th": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "palletizer",
+      "namespace": "rdk",
+      "type": "generic",
+      "model": "<NAMESPACE>:palletizing-module:palletizer",
+      "attributes": {
+        "arm": "arm",
+        "gripper": "gripper",
+        "pick_station": "pick-station",
+        "box_width_mm": 282,
+        "box_length_mm": 240,
+        "box_height_mm": 85
+      },
+      "depends_on": [
+        "arm",
+        "gripper",
+        "pick-station"
+      ]
+    }
+  ],
+  "services": [
+    {
+      "name": "workcell-scene",
+      "namespace": "rdk",
+      "type": "world_state_store",
+      "model": "viam:workcell-components:workcell-scene",
+      "attributes": {
+        "pick_station_names": [
+          "pick-station"
+        ],
+        "pallet_names": [
+          "pallet"
+        ],
+        "tick_interval_secs": 1.0
+      }
+    }
+  ]
+}

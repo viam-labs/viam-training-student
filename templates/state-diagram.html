@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>State diagram template</title>
+
+  <!--
+    State-diagram renderer template (Section 13 onward).
+
+    Self-contained reference for the SVG state diagram every student
+    builds in §13 and grows through §15, §16, §17, §19, §19. Open this
+    file in a browser to see how it looks; copy the CSS, the SVG markup,
+    and the JS into your operator webapp to use it.
+
+    The renderer is data-driven from two arrays:
+
+      STATE_LAYOUT — one entry per state. Each entry sets the state's
+                     ID, its grid position (col, row), display label,
+                     and an optional terminal kind (complete / error).
+
+      STATE_EDGES  — one entry per transition. Each entry sets from,
+                     to, kind (flow / retry / cycle / terminal), and
+                     optionally a routing path for non-adjacent edges.
+
+    Adding a state in a later section is one entry per array. The
+    renderer redraws automatically.
+
+    The page renders with `IDLE` highlighted. Call `setActiveState(stateId)`
+    to move the highlight; in your Web Application you drive it from your
+    status verb's `state` field — see the `setActiveState` function near the
+    bottom.
+  -->
+
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f7f8fa;
+      color: #1f2937;
+    }
+    h1 { font-size: 1.4em; margin: 0 0 4px 0; }
+    .hint { font-size: 13px; color: #6b7280; margin: 0 0 16px 0; }
+    .card { background: #fff; border: 1px solid #e2e5e9; border-radius: 8px; padding: 16px; }
+
+    /* SVG state diagram */
+    .state-svg { width: 100%; height: auto; display: block; }
+
+    /* Each state is a rounded rectangle with a label inside. */
+    .state-svg .state-node rect {
+      fill: #f3f4f6;
+      stroke: #d1d5db;
+      stroke-width: 1;
+      transition: fill 0.15s, stroke 0.15s, stroke-width 0.15s;
+    }
+    .state-svg .state-node text {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 11px;
+      fill: #374151;
+      pointer-events: none;
+      user-select: none;
+    }
+    .state-svg .state-node { cursor: pointer; }
+    .state-svg .state-node:hover rect {
+      fill: #e5e7eb;
+      stroke: #6b7280;
+    }
+
+    /* The .active class lights up the current state. */
+    .state-svg .state-node.active rect {
+      fill: #2563eb;
+      stroke: #2563eb;
+      stroke-width: 2;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    .state-svg .state-node.active text { fill: #fff; font-weight: 600; }
+    @keyframes pulse {
+      0%, 100% { filter: drop-shadow(0 0 0 rgba(37,99,235,0)); }
+      50%      { filter: drop-shadow(0 0 6px rgba(37,99,235,0.55)); }
+    }
+
+    /* Terminal states: green for "complete", red for "error". They use a
+       muted outline by default and brighten when active. */
+    .state-svg .state-node.terminal-complete rect {
+      fill: #fff; stroke: #059669; stroke-width: 1.5;
+    }
+    .state-svg .state-node.terminal-complete text { fill: #059669; font-weight: 600; }
+    .state-svg .state-node.terminal-complete.active rect { fill: #059669; }
+    .state-svg .state-node.terminal-complete.active text { fill: #fff; }
+
+    .state-svg .state-node.terminal-error rect {
+      fill: #fff; stroke: #dc2626; stroke-width: 1.5;
+    }
+    .state-svg .state-node.terminal-error text { fill: #dc2626; font-weight: 600; }
+    .state-svg .state-node.terminal-error.active rect { fill: #dc2626; }
+    .state-svg .state-node.terminal-error.active text { fill: #fff; }
+
+    /* Edge kinds */
+    .state-svg .edge {
+      stroke: #9ca3af;
+      stroke-width: 1.4;
+      fill: none;
+      stroke-linejoin: round;
+      stroke-linecap: round;
+    }
+    .state-svg .edge.retry    { stroke: #d97706; stroke-dasharray: 5 3; }
+    .state-svg .edge.cycle    { stroke: #2563eb; stroke-dasharray: 5 3; }
+    .state-svg .edge.terminal { stroke: #059669; }
+
+    .state-svg .edge-label {
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 10px;
+      fill: #6b7280;
+      user-select: none;
+    }
+    .state-svg .edge-label.retry { fill: #d97706; }
+    .state-svg .edge-label.cycle { fill: #2563eb; }
+
+    /* Legend */
+    .state-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 11px;
+      color: #6b7280;
+      margin-top: 8px;
+    }
+    .state-legend .dot {
+      display: inline-block;
+      width: 18px; height: 2px; vertical-align: middle;
+      margin-right: 4px;
+    }
+    .state-legend .dot.flow  { background: #9ca3af; }
+    .state-legend .dot.retry { background: #d97706; }
+    .state-legend .dot.cycle { background: #2563eb; }
+    .state-legend .dot.term  { background: #059669; }
+  </style>
+</head>
+<body>
+  <h1>State diagram template</h1>
+  <p class="hint">This standalone demo starts with <code>IDLE</code> highlighted. In your Web Application, call <code>setActiveState</code> with the current state from your <code>status</code> verb to track the live cycle.</p>
+
+  <div class="card">
+    <svg id="stateMachine" class="state-svg" viewBox="0 0 820 360"
+         xmlns="http://www.w3.org/2000/svg" aria-label="state machine">
+      <defs>
+        <marker id="arr-flow" viewBox="0 0 10 10" refX="9" refY="5"
+                markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 Z" fill="#9ca3af"/>
+        </marker>
+        <marker id="arr-retry" viewBox="0 0 10 10" refX="9" refY="5"
+                markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 Z" fill="#d97706"/>
+        </marker>
+        <marker id="arr-cycle" viewBox="0 0 10 10" refX="9" refY="5"
+                markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 Z" fill="#2563eb"/>
+        </marker>
+        <marker id="arr-terminal" viewBox="0 0 10 10" refX="9" refY="5"
+                markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 Z" fill="#059669"/>
+        </marker>
+      </defs>
+    </svg>
+    <div class="state-legend">
+      <span><span class="dot flow"></span>happy path</span>
+      <span><span class="dot retry"></span>retry</span>
+      <span><span class="dot cycle"></span>next cycle</span>
+      <span><span class="dot term"></span>complete</span>
+    </div>
+  </div>
+
+  <script>
+    // ─── Layout ─────────────────────────────────────────────────────────────
+    // Grid: SM_COL_X is x-coordinates of each column, SM_ROW_Y is y of each row.
+    // The default spans 5 columns × 4 rows in an 820×360 viewBox. Adjust as
+    // your state machine grows.
+    //
+    // The "snake" or "zig-zag" layout (row 0 left→right, row 1 right→left,
+    // row 2 left→right) keeps the happy-path arrows short and readable as the
+    // state count grows. Section 19's full palletizer FSM has 17 states laid
+    // out this way.
+
+    const SM_BOX_W = 130, SM_BOX_H = 38;
+    const SM_COL_X = [20, 170, 320, 470, 620];  // 5 columns
+    const SM_ROW_Y = [20, 100, 180, 270];       // 4 rows
+
+    // ─── States ─────────────────────────────────────────────────────────────
+    // One entry per state. Required: id, col, row, label.
+    // Optional: terminal: 'complete' | 'error' for terminal states.
+    //
+    // The example below is the §12 four-state scaffold. Sections 15-19 each
+    // add a few states; by §19 the array has ~17 entries.
+
+    const STATE_LAYOUT = [
+      { id: 'IDLE',         col: 0, row: 0, label: 'IDLE' },
+      { id: 'MOVING_OUT',   col: 1, row: 0, label: 'MOVING_OUT' },
+      { id: 'MOVING_BACK',  col: 2, row: 0, label: 'MOVING_BACK' },
+      { id: 'DONE',         col: 3, row: 0, label: 'DONE',  terminal: 'complete' },
+      { id: 'ERROR',        col: 4, row: 0, label: 'ERROR', terminal: 'error' },
+    ];
+
+    // ─── Edges ──────────────────────────────────────────────────────────────
+    // One entry per transition. Required: from, to, kind.
+    //   kind: 'flow' (happy path) | 'retry' (loop back) |
+    //         'cycle' (next-cycle loop) | 'terminal' (completion edge)
+    // Optional: fs / ts ('l' | 'r' | 't' | 'b') = which side of the from /
+    //   to box the edge connects to. Defaults: from-right to to-left.
+    // Optional: label (rendered near the edge midpoint).
+    //
+    // For non-adjacent edges that need to route around other boxes, the
+    // renderer below has hooks for custom path shapes (see smEdgePath).
+
+    const STATE_EDGES = [
+      { from: 'IDLE',        to: 'MOVING_OUT',  kind: 'flow' },
+      { from: 'MOVING_OUT',  to: 'MOVING_BACK', kind: 'flow' },
+      { from: 'MOVING_BACK', to: 'DONE',        kind: 'flow' },
+    ];
+
+    // ─── Renderer ───────────────────────────────────────────────────────────
+    // Data-driven SVG. Edits go to the arrays above; the renderer never
+    // needs to change as the state machine grows.
+
+    const STATE_INDEX = Object.fromEntries(STATE_LAYOUT.map((s) => [s.id, s]));
+
+    function smPos(id) {
+      const s = STATE_INDEX[id];
+      return { x: SM_COL_X[s.col], y: SM_ROW_Y[s.row], w: SM_BOX_W, h: SM_BOX_H };
+    }
+
+    function smSide(id, side) {
+      const p = smPos(id);
+      switch (side) {
+        case 'l': return { x: p.x,           y: p.y + p.h / 2 };
+        case 'r': return { x: p.x + p.w,     y: p.y + p.h / 2 };
+        case 't': return { x: p.x + p.w / 2, y: p.y };
+        case 'b': return { x: p.x + p.w / 2, y: p.y + p.h };
+      }
+    }
+
+    function smEdgePath(e) {
+      // Default: straight line from the right side of `from` to the left
+      // side of `to`. Override `fs` / `ts` per edge for vertical hops or
+      // backward connections.
+      const a = smSide(e.from, e.fs || 'r');
+      const b = smSide(e.to,   e.ts || 'l');
+      return `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
+    }
+
+    function smMarkerFor(kind) {
+      return ({
+        flow:     'url(#arr-flow)',
+        retry:    'url(#arr-retry)',
+        cycle:    'url(#arr-cycle)',
+        terminal: 'url(#arr-terminal)',
+      })[kind] || 'url(#arr-flow)';
+    }
+
+    function renderStateMachine() {
+      const svg = document.getElementById('stateMachine');
+      if (!svg) return;
+      const NS = 'http://www.w3.org/2000/svg';
+
+      // Edges first so nodes paint on top.
+      for (const e of STATE_EDGES) {
+        const p = document.createElementNS(NS, 'path');
+        p.setAttribute('d', smEdgePath(e));
+        p.setAttribute('class', 'edge ' + e.kind);
+        p.setAttribute('marker-end', smMarkerFor(e.kind));
+        svg.appendChild(p);
+
+        if (e.label) {
+          const a = smSide(e.from, e.fs || 'r');
+          const b = smSide(e.to,   e.ts || 'l');
+          const t = document.createElementNS(NS, 'text');
+          t.setAttribute('x', (a.x + b.x) / 2);
+          t.setAttribute('y', (a.y + b.y) / 2 - 4);
+          t.setAttribute('text-anchor', 'middle');
+          t.setAttribute('class', 'edge-label ' + e.kind);
+          t.textContent = e.label;
+          svg.appendChild(t);
+        }
+      }
+
+      // Nodes
+      for (const s of STATE_LAYOUT) {
+        const pos = smPos(s.id);
+        const g = document.createElementNS(NS, 'g');
+        g.setAttribute('class', 'state-node');
+        g.dataset.state = s.id;
+        if (s.terminal) g.classList.add('terminal-' + s.terminal);
+
+        const r = document.createElementNS(NS, 'rect');
+        r.setAttribute('x', pos.x);
+        r.setAttribute('y', pos.y);
+        r.setAttribute('width', pos.w);
+        r.setAttribute('height', pos.h);
+        r.setAttribute('rx', 6);
+        g.appendChild(r);
+
+        const t = document.createElementNS(NS, 'text');
+        t.setAttribute('x', pos.x + pos.w / 2);
+        t.setAttribute('y', pos.y + pos.h / 2 + 4);
+        t.setAttribute('text-anchor', 'middle');
+        t.textContent = s.label;
+        g.appendChild(t);
+
+        svg.appendChild(g);
+      }
+    }
+
+    // Call this from your status-poll handler with the current state ID.
+    // It removes `.active` from every node and adds it to the current one.
+    function setActiveState(activeId) {
+      const svg = document.getElementById('stateMachine');
+      if (!svg) return;
+      svg.querySelectorAll('.state-node').forEach((n) => {
+        n.classList.toggle('active', n.dataset.state === activeId);
+      });
+    }
+
+    renderStateMachine();
+    // Start with IDLE highlighted until the status poll drives it.
+    setActiveState('IDLE');
+  </script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+{
+  "_comment": "Reference machine config matching the end-of-Section-19 cell state. Gripper is shrews-testing:robotiq:simulated-epick-vacuum-gripper (registry module shrews-testing:robotiq-epick, hold_delay_ms:250), swapped in at §18. Cell has pack-sequencer service installed and the palletizer's pack_sequencer attr/dep wired (added in §19). Section 20 only adds module code (verify_pallet + verify_pick_station verbs, a Verify panel in the Web Application) — no machine-config edits. Replace <NAMESPACE> with your org's namespace before pushing. Used as a fallback in Section 20's Setup-check.",
+  "modules": [
+    {"type": "registry", "name": "workcell-components", "module_id": "viam:workcell-components", "version": "0.6.0-rc4"},
+    {"type": "registry", "name": "pack-sequencer", "module_id": "viam:pack-sequencer", "version": "0.3.0"},
+    {"type": "registry", "name": "palletizing-module", "module_id": "<NAMESPACE>:palletizing-module", "version": "latest"},
+    {"type": "registry", "name": "robotiq-epick", "module_id": "shrews-testing:robotiq-epick", "version": "latest"}
+  ],
+  "components": [
+    {
+      "name": "arm", "namespace": "rdk", "type": "arm", "model": "rdk:builtin:simulated",
+      "attributes": {"arm-model": "ur5e", "simulate-time": true, "speed": 0.3},
+      "frame": {"parent": "world", "translation": {"x": 0, "y": 0, "z": 0}, "orientation": {"type": "ov_degrees", "value": {"x": 0, "y": 0, "z": 1, "th": 0}}}
+    },
+    {
+      "name": "gripper", "namespace": "rdk", "type": "gripper", "model": "shrews-testing:robotiq:simulated-epick-vacuum-gripper",
+      "attributes": {"hold_delay_ms": 250},
+      "frame": {"parent": "arm", "translation": {"x": 0, "y": 0, "z": 196}, "orientation": {"type": "ov_degrees", "value": {"x": 0, "y": 0, "z": 1, "th": 0}}}
+    },
+    {
+      "name": "floor", "namespace": "rdk", "type": "generic", "model": "rdk:builtin:fake",
+      "attributes": {},
+      "frame": {"parent": "world", "translation": {"x": 0, "y": 0, "z": -50}, "geometry": {"type": "box", "x": 2000, "y": 2000, "z": 10, "label": "floor"}}
+    },
+    {
+      "name": "pallet", "namespace": "rdk", "type": "generic", "model": "viam:workcell-components:pallet",
+      "attributes": {"width_mm": 500, "length_mm": 350, "thickness_mm": 100},
+      "frame": {"parent": "world", "translation": {"x": 200, "y": 500, "z": 100}, "orientation": {"type": "ov_degrees", "value": {"x": 0, "y": 0, "z": 1, "th": 0}}}
+    },
+    {
+      "name": "pick-station", "namespace": "rdk", "type": "generic", "model": "viam:workcell-components:pick-station",
+      "attributes": {"lowest_point_height_mm": 200, "box_origin_offset_mm": {"x": 200, "y": 200}, "box_theta_deg": 0, "pick_home_z_offset_mm": 120},
+      "frame": {"parent": "world", "translation": {"x": 400, "y": -300, "z": 200}, "orientation": {"type": "ov_degrees", "value": {"x": 0, "y": 0, "z": 1, "th": 0}}}
+    },
+    {
+      "name": "palletizer", "namespace": "rdk", "type": "generic", "model": "<NAMESPACE>:palletizing-module:palletizer",
+      "attributes": {"arm": "arm", "gripper": "gripper", "pick_station": "pick-station", "pallet": "pallet", "pack_sequencer": "pack-sequencer", "box_width_mm": 200, "box_length_mm": 150, "box_height_mm": 100, "safety_height_mm": 200, "place_dwell_secs": 0.5},
+      "depends_on": ["arm", "gripper", "pick-station", "pallet", "pack-sequencer"]
+    }
+  ],
+  "services": [
+    {
+      "name": "workcell-scene", "namespace": "rdk", "type": "world_state_store", "model": "viam:workcell-components:workcell-scene",
+      "attributes": {"pick_station_names": ["pick-station"], "pallet_names": ["pallet"], "tick_interval_secs": 1.0}
+    },
+    {
+      "name": "pack-sequencer", "namespace": "rdk", "type": "world_state_store", "model": "viam:pack-sequencer:sequencer",
+      "attributes": {"pallet": "pallet", "box_width_mm": 200, "box_length_mm": 150, "box_height_mm": 60, "pallet_area_height_mm": 200, "quantity": 8, "box_offset_x_mm": 10, "box_offset_y_mm": 10, "box_color": {"r": 200, "g": 150, "b": 100}, "place_orientation": {"o_x": 0, "o_y": 0, "o_z": -1, "theta": 0}}
+    }
+  ]
+}

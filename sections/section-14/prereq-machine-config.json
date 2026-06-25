@@ -1,0 +1,186 @@
+{
+  "_comment": "Reference machine config matching the end-of-Section-13 cell state (the cell is unchanged since Section 11 \u2014 Sections 12-14 only add module code and webapp, not machine config), using the cloud hot-reloaded palletizing-module (registry entry, not a local build). Replace <NAMESPACE> with your org's namespace (e.g. 'testing') before pushing. Used as a fallback in Section 14's Setup-check if your cell drifted. Note: pushing this restores the cell + component graph, but the palletizing-module's actual build lives on your machine via 'viam module reload' \u2014 if the module shows unavailable after restoring, re-run 'viam module reload --part-id <PART_ID>' to reinstall it.",
+  "modules": [
+    {
+      "type": "registry",
+      "name": "workcell-components",
+      "module_id": "viam:workcell-components",
+      "version": "0.6.0-rc4"
+    },
+    {
+      "type": "registry",
+      "name": "robotiq-epick",
+      "module_id": "viam:robotiq-epick",
+      "version": "latest"
+    },
+    {
+      "type": "registry",
+      "name": "palletizing-module",
+      "module_id": "<NAMESPACE>:palletizing-module",
+      "version": "latest"
+    }
+  ],
+  "components": [
+    {
+      "name": "arm",
+      "namespace": "rdk",
+      "type": "arm",
+      "model": "rdk:builtin:simulated",
+      "attributes": {
+        "arm-model": "ur5e",
+        "simulate-time": true,
+        "speed": 0.3
+      },
+      "frame": {
+        "parent": "world",
+        "translation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "orientation": {
+          "type": "ov_degrees",
+          "value": {
+            "x": 0,
+            "y": 0,
+            "z": 1,
+            "th": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "gripper",
+      "namespace": "rdk",
+      "type": "gripper",
+      "model": "viam:robotiq:simulated-epick-vacuum-gripper",
+      "attributes": {},
+      "frame": {
+        "parent": "arm",
+        "translation": {
+          "x": 0,
+          "y": 0,
+          "z": 196
+        },
+        "orientation": {
+          "type": "ov_degrees",
+          "value": {
+            "x": 0,
+            "y": 0,
+            "z": 1,
+            "th": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "floor",
+      "namespace": "rdk",
+      "type": "generic",
+      "model": "rdk:builtin:fake",
+      "attributes": {},
+      "frame": {
+        "parent": "world",
+        "translation": {
+          "x": 0,
+          "y": 0,
+          "z": -50
+        },
+        "geometry": {
+          "type": "box",
+          "x": 2000,
+          "y": 2000,
+          "z": 10,
+          "label": "floor"
+        }
+      }
+    },
+    {
+      "name": "pallet",
+      "namespace": "rdk",
+      "type": "generic",
+      "model": "viam:workcell-components:pallet",
+      "attributes": {
+        "width_mm": 500,
+        "length_mm": 350,
+        "thickness_mm": 100
+      },
+      "frame": {
+        "parent": "world",
+        "translation": {
+          "x": 200,
+          "y": 500,
+          "z": 100
+        },
+        "orientation": {
+          "type": "ov_degrees",
+          "value": {
+            "x": 0,
+            "y": 0,
+            "z": 1,
+            "th": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "pick-station",
+      "namespace": "rdk",
+      "type": "generic",
+      "model": "viam:workcell-components:pick-station",
+      "attributes": {
+        "lowest_point_height_mm": 200,
+        "box_origin_offset_mm": {
+          "x": 200,
+          "y": 200
+        },
+        "box_theta_deg": 0,
+        "pick_home_z_offset_mm": 120
+      },
+      "frame": {
+        "parent": "world",
+        "translation": {
+          "x": 400,
+          "y": -300,
+          "z": 200
+        },
+        "orientation": {
+          "type": "ov_degrees",
+          "value": {
+            "x": 0,
+            "y": 0,
+            "z": 1,
+            "th": 0
+          }
+        }
+      }
+    }
+  ],
+  "services": [
+    {
+      "name": "palletizer",
+      "namespace": "rdk",
+      "type": "generic",
+      "model": "<NAMESPACE>:palletizing-module:palletizer",
+      "attributes": {
+        "arm": "arm",
+        "gripper": "gripper"
+      }
+    },
+    {
+      "name": "workcell-scene",
+      "namespace": "rdk",
+      "type": "world_state_store",
+      "model": "viam:workcell-components:workcell-scene",
+      "attributes": {
+        "pick_station_names": [
+          "pick-station"
+        ],
+        "pallet_names": [
+          "pallet"
+        ],
+        "tick_interval_secs": 1.0
+      }
+    }
+  ]
+}

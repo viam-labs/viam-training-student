@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Operator</title>
+
+  <!--
+    Operator-webapp starter template (Section 14).
+
+    The palletizer is a generic *service* (rdk:service:generic); this page
+    connects to it with the Viam JS SDK's GenericServiceClient and drives it
+    over DoCommand.
+
+    What this gives you:
+      - Cookie-based credential discovery (works with both the Viam-hosted
+        single-machine app cookie and the local viamkit/operatorapp dev server)
+      - A reusable `cmd({verb: args})` helper for doCommand calls
+        (the SDK wraps the request for you; plain-object handling on the response)
+      - A live connection-status line and a Reconnect button
+      - A results panel that shows the last command + response
+      - CSS helper classes the later sections plug into:
+          .pose-grid     responsive grid for pose/dimension input forms
+          .error-banner  red banner for an error display
+                         (distinct from .err-msg which styles the
+                         per-command response panel)
+          .config-card   wraps a live-edit form for a sibling resource —
+                         pallet, pick-station, pack-sequencer
+
+    What it doesn't give you yet:
+      - A pose form for move commands (a later section)
+      - Run-control buttons (Start/Restart/Stop/Step/Reset/Goto) (§14)
+      - A status grid with cycle stats (§14)
+      - The state diagram (§14 — see templates/state-diagram.html)
+      - The error banner content + Clear/Recover button (a later section)
+      - Configuration cards for pallet / pick-station / pack-sequencer (a later section)
+
+    To use:
+      In Section 14 you copy this to cmd/cli/static/index.html and serve it
+      locally with the viamkit/operatorapp dev server (go run ./cmd/cli). To
+      ship it to operators, a later section deploys it as a Viam application
+      via meta.json's `applications` block:
+      https://docs.viam.com/build-apps/hosting/meta-json-reference/
+
+    The cookie discovery, the SDK-Struct wrapping, and the response handling
+    are the three pieces students would otherwise discover the hard way; they
+    are pre-wired here so the operator-app sections can focus on the controls,
+    not the connection plumbing.
+  -->
+
+  <style>
+    :root {
+      --bg: #f7f8fa;
+      --card: #ffffff;
+      --border: #e2e5e9;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --danger: #dc2626;
+      --ok: #059669;
+      --code-bg: #f3f4f6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 20px;
+      background: var(--bg);
+      color: var(--text);
+    }
+    h1 { font-size: 1.5em; margin: 0 0 12px 0; }
+    h2 { font-size: 1.05em; margin: 18px 0 8px 0; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .conn-bar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 12px;
+      margin-bottom: 12px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+      flex-wrap: wrap;
+    }
+    .conn-bar input { padding: 4px 8px; font-size: 13px; width: 220px; }
+    .conn-bar button { padding: 4px 10px; font-size: 12px; cursor: pointer; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    button {
+      padding: 9px 16px;
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--text);
+      cursor: pointer;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    button.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+    button.primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+    .response, .err-msg {
+      background: var(--code-bg);
+      padding: 12px;
+      border-radius: 6px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 240px;
+      overflow-y: auto;
+    }
+    .err-msg { background: #fef2f2; color: var(--danger); border: 1px solid #fecaca; }
+    /* error-banner is the error display a later section adds — a full-width
+       red block above the run controls, distinct from .err-msg which
+       styles the per-command response panel. */
+    .error-banner {
+      background: #fef2f2;
+      color: var(--danger);
+      border: 1px solid #fecaca;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin: 0 0 12px 0;
+      font-size: 13px;
+    }
+    .error-banner .label { font-weight: 600; margin-right: 6px; }
+    .error-banner .field { display: block; margin-top: 4px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; word-break: break-all; }
+    /* pose-grid wraps responsively — use for any pose form (Move,
+       set_pallet_dimensions, etc.). 80px min width prevents overflow
+       on narrow viewports; auto-fit lets fewer-than-7 fields collapse
+       to fewer columns naturally. */
+    .pose-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+      gap: 8px;
+      align-items: end;
+    }
+    .pose-grid label { display: flex; flex-direction: column; gap: 2px; }
+    .pose-grid input { padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; }
+    /* config-card wraps a "live edit" form for a sibling resource
+       (pallet, pick-station, pack-sequencer). Pair with cmd() helpers
+       that call the target's set_attributes/set_dimensions verbs. */
+    .config-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+    }
+    .config-card h3 { margin: 0 0 10px 0; font-size: 14px; font-weight: 600; }
+    .config-card .row { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+    .config-card .row > .grow { flex: 1; }
+    #conn { font-size: 12px; color: var(--muted); }
+    #conn.ok  { color: var(--ok); }
+    #conn.err { color: var(--danger); }
+    label { font-size: 13px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <h1>Operator</h1>
+
+  <!-- Connection bar: shows live status, lets the student reconnect on demand. -->
+  <div class="conn-bar">
+    <label>Service name:</label>
+    <input id="resourceName" value="palletizer" />
+    <button onclick="reconnect()">Reconnect</button>
+    <span id="conn" style="margin-left:auto;">Connecting…</span>
+  </div>
+
+  <!--
+    EXAMPLE: a one-button card that sends a placeholder command.
+    Replace this card with whatever your section asks for. The pattern
+    is always the same: an input or two, a button that calls cmd({verb: args}),
+    and the results panel below shows what came back.
+  -->
+  <div class="card">
+    <h2>Example: send a command</h2>
+    <p style="font-size: 13px; color: var(--muted); margin: 0 0 8px 0;">
+      Sends <code>{ping: true}</code> to the configured service. You'll
+      get an "unknown command" error until your module implements verbs.
+    </p>
+    <button class="primary" onclick="cmd({ping: true})">Send Ping</button>
+  </div>
+
+  <!-- Results panel: cmd() writes here on every call. -->
+  <div class="card">
+    <h2>Last Response</h2>
+    <div id="responseDisplay" class="response">(none)</div>
+  </div>
+
+  <script type="module">
+    // The Viam JS SDK is loaded from esm.sh. Pin a specific version in
+    // production; @latest is fine for the curriculum and avoids stale
+    // pins as the SDK ships fixes.
+    import * as VIAM from 'https://esm.sh/@viamrobotics/sdk@latest';
+
+    let robot = null;
+    let resource = null;
+
+    // --- Credential discovery -------------------------------------------------
+    // Single-machine Viam apps are launched at /machine/<hostname>/. The Viam
+    // app server sets a cookie keyed by the machine hostname; the cookie value
+    // is URL-encoded JSON with the API key + machine hostname:
+    //
+    //   { apiKey: { id, key }, hostname, machineId }
+    //
+    // We discover those, pass them to createRobotClient, and the app
+    // auto-connects without the operator typing anything.
+    //
+    // For local development we serve this page from the viamkit/operatorapp
+    // dev server, which sets host / api-key-id / api-key cookies from the
+    // VIAM_* env vars — we read those too. As a last resort (file opened
+    // directly), pass ?machine_url=...&api_key=...&api_key_id=... in the URL.
+
+    function getCookie(name) {
+      const all = ('; ' + document.cookie).split('; ' + name + '=');
+      if (all.length < 2) return null;
+      return all.pop().split(';').shift();
+    }
+
+    function discoverCreds() {
+      const segments = window.location.pathname.split('/').filter(Boolean);
+      // /machine/<hostname>/ → segments = ["machine", "<hostname>", ...]
+      // /<hostname>/         → segments = ["<hostname>", ...]
+      const machineKey = segments[1] || segments[0];
+      if (machineKey) {
+        const raw = getCookie(machineKey);
+        if (raw) {
+          try {
+            const parsed = JSON.parse(decodeURIComponent(raw));
+            return {
+              host: parsed.hostname || machineKey,
+              apiKeyId: parsed.apiKey?.id,
+              apiKey: parsed.apiKey?.key,
+              source: 'cookie',
+            };
+          } catch (e) {
+            console.warn('Failed to parse Viam cookie:', e);
+          }
+        }
+      }
+      // Local dev server: viamkit/operatorapp sets these four plain cookies
+      // from the VIAM_* env vars (the part-id cookie isn't needed here).
+      const opHost = getCookie('host');
+      const opKeyId = getCookie('api-key-id');
+      const opKey = getCookie('api-key');
+      if (opHost && opKeyId && opKey) {
+        return { host: opHost, apiKeyId: opKeyId, apiKey: opKey, source: 'operatorapp-cookie' };
+      }
+      // Local-testing fallback via query params.
+      const params = new URLSearchParams(window.location.search);
+      const host =
+        params.get('machine_url') ||
+        params.get('host') ||
+        params.get('hostname') ||
+        (machineKey || null);
+      const apiKey = params.get('api_key') || params.get('apiKey');
+      const apiKeyId = params.get('api_key_id') || params.get('apiKeyId');
+      if (host && apiKey && apiKeyId) {
+        return { host, apiKey, apiKeyId, source: 'url-params' };
+      }
+      return { host: host || null, source: 'incomplete' };
+    }
+
+    const conn = document.getElementById('conn');
+
+    async function connect() {
+      conn.className = '';
+      conn.textContent = 'Connecting…';
+
+      const creds = discoverCreds();
+      if (!creds.apiKey || !creds.apiKeyId || !creds.host) {
+        conn.className = 'err';
+        conn.textContent =
+          'Missing connection credentials (host=' + (creds.host || '?') +
+          ', source=' + creds.source +
+          '). Open this app from the Viam app, or pass ?machine_url=...&api_key=...&api_key_id=... in the URL.';
+        return;
+      }
+
+      try {
+        robot = await VIAM.createRobotClient({
+          host: creds.host,
+          credentials: {
+            type: 'api-key',
+            authEntity: creds.apiKeyId,
+            payload: creds.apiKey,
+          },
+          signalingAddress: 'https://app.viam.com:443',
+        });
+        const name = document.getElementById('resourceName').value;
+
+        // The palletizer is a generic *service* (rdk:service:generic), so use
+        // GenericServiceClient. Common copy-paste mistake: GenericComponentClient,
+        // which targets generic *components* (rdk:component:generic) and won't
+        // resolve a service-typed resource.
+        const Ctor = VIAM.GenericServiceClient || VIAM.GenericClient;
+        if (!Ctor) throw new Error('Viam SDK: GenericServiceClient not exported');
+        resource = new Ctor(robot, name);
+
+        conn.className = 'ok';
+        conn.textContent = '● Connected to ' + creds.host + ' as "' + name + '" (' + creds.source + ')';
+      } catch (e) {
+        conn.className = 'err';
+        conn.textContent = 'Connection error: ' + (e?.message || e);
+      }
+    }
+    window.reconnect = connect;
+
+    // --- The cmd() helper -----------------------------------------------------
+    // Every DoCommand call goes through here. Three things to know:
+    //
+    //   1. Request shape. The Viam JS SDK's doCommand wraps a plain JS object
+    //      in a google.protobuf.Struct for you, so you pass the args object
+    //      directly — no manual Struct.fromJson needed.
+    //
+    //   2. Plain-object response handling. In current SDK versions doCommand
+    //      returns a plain JS object — do NOT call .toJson() on it.
+    //
+    //   3. Unified rendering — every result lands in #responseDisplay.
+
+    window.cmd = async function (c) {
+      const out = document.getElementById('responseDisplay');
+      if (!resource) {
+        out.className = 'err-msg';
+        out.textContent = 'Not connected — click Reconnect.';
+        return;
+      }
+      try {
+        const result = await resource.doCommand(c);
+        out.className = 'response';
+        out.textContent = '> ' + JSON.stringify(c) + '\n' + JSON.stringify(result, null, 2);
+        return result;
+      } catch (e) {
+        out.className = 'err-msg';
+        out.textContent = '> ' + JSON.stringify(c) + '\n' + (e?.message || e);
+        throw e;
+      }
+    };
+
+    // Auto-connect on load.
+    connect();
+  </script>
+</body>
+</html>
