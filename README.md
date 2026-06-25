@@ -16,10 +16,18 @@ web app to run it.
 
 Clone this repo **next to** (a sibling of) the module you build during the course — not
 inside it. The palletizer worksheets copy templates with relative paths like
-`../viam-training/templates/...`, so clone it into a folder named `viam-training`:
+`../viam-training/templates/...`, so clone it into a folder named `viam-training`.
+Pick whichever you use — the trailing `viam-training` is required either way:
 
 ```bash
+# GitHub CLI
+gh repo clone viam-labs/viam-training-student viam-training
+
+# git over SSH
 git clone git@github.com:viam-labs/viam-training-student.git viam-training
+
+# git over HTTPS
+git clone https://github.com/viam-labs/viam-training-student.git viam-training
 ```
 
 That gives you this layout, which the worksheets assume:
